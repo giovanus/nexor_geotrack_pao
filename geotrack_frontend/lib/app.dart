@@ -17,6 +17,7 @@ class GeoTrackApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Nexor GeoTrack',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
