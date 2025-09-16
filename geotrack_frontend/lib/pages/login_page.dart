@@ -27,7 +27,7 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('assets/images/logo.png', width: 100, height: 100),
+              Image.asset('assets/images/logo.png', width: 300, height: 300),
               const SizedBox(height: 30),
               const Text(
                 'Entrez votre PIN',
