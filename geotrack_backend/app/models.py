@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
 from sqlalchemy.sql import func
 from .database import Base
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship
 
 
 class User(Base):
@@ -11,6 +13,9 @@ class User(Base):
     hashed_pin = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relation avec Config
+    config = relationship("Config", back_populates="user", uselist=False, cascade="all, delete-orphan")
     
 class Device(Base):
     __tablename__ = "devices"
@@ -46,8 +51,12 @@ class Config(Base):
     __tablename__ = "configs"
     
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)  # Lien vers l'utilisateur
     x_parameter = Column(Integer, default=5)
     y_parameter = Column(Integer, default=10)
     device_id = Column(String, default="mobile-device")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relation
+    user = relationship("User", back_populates="config")
