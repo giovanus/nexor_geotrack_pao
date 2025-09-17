@@ -13,6 +13,15 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _pinController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _obscurePin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _pinController.addListener(() {
+      setState(() {}); // Rafraîchir l'UI quand le PIN change
+    });
+  }
 
   // Couleurs personnalisées
   final Color _primaryGreen = const Color(0xFF2ECC40); // Vert Nexor
@@ -161,6 +170,9 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
+      // Masquer le clavier
+      FocusScope.of(context).unfocus();
+
       setState(() {
         _isLoading = true;
       });
@@ -176,7 +188,14 @@ class _LoginPageState extends State<LoginPage> {
         Navigator.pushReplacementNamed(context, '/dashboard');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.error ?? 'Échec de la connexion')),
+          SnackBar(
+            content: Text(result.error ?? 'Échec de la connexion'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       }
     }
@@ -184,6 +203,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _pinController.removeListener(() {});
     _pinController.dispose();
     super.dispose();
   }
