@@ -12,6 +12,7 @@ import 'package:geotrack_frontend/widgets/connection_status.dart';
 import 'package:geotrack_frontend/pages/settings_page.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geotrack_frontend/services/auto_collect_service.dart'; // IMPORT AJOUTÉ
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -255,8 +256,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _autoCollect() async {
     try {
-      final location = await _gpsService.getCurrentLocation();
-      await _storageService.savePendingGpsData(location);
+      // Utilisation de la nouvelle méthode
+      await AutoCollectService.collectGpsDataBackground();
       await _loadStats();
       await _loadPendingData(); // Recharger les données en attente
       await _loadHistoryData(); // Recharger l'historique
@@ -265,7 +266,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _autoSync() async {
     try {
-      await _syncService.syncPendingData();
+      // Utilisation de la nouvelle méthode
+      await AutoCollectService.syncGpsDataBackground();
       // Recharger toutes les données après synchronisation
       await Future.wait([_loadStats(), _loadPendingData(), _loadHistoryData()]);
     } catch (e) {
