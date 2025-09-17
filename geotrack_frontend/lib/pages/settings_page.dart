@@ -62,6 +62,10 @@ class _SettingsPageState extends State<SettingsPage> {
       await prefs.setInt('sync_interval', syncInterval);
 
       if (!mounted) return;
+
+      // Retourner true pour indiquer que les paramètres ont été modifiés
+      Navigator.pop(context, true);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Paramètres sauvegardés avec succès'),
@@ -151,7 +155,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paramètres'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.green,
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -173,7 +177,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.timer, color: Colors.deepPurple),
+                          Icon(Icons.timer, color: Colors.green),
                           SizedBox(width: 12),
                           Text(
                             'Intervalles de Synchronisation',
@@ -233,7 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: _saveSettings,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: Colors.deepPurple,
+                            backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -258,7 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.lock, color: Colors.deepPurple),
+                        const Icon(Icons.lock, color: Colors.green),
                         const SizedBox(width: 12),
                         const Text(
                           'Sécurité',
@@ -273,7 +277,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             _showPinSection
                                 ? Icons.expand_less
                                 : Icons.expand_more,
-                            color: Colors.deepPurple,
+                            color: Colors.green,
                           ),
                           onPressed: () {
                             setState(() {
@@ -433,7 +437,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 16,
                                   ),
-                                  backgroundColor: Colors.deepPurple,
+                                  backgroundColor: Colors.green,
                                   foregroundColor: Colors.white,
                                 ),
                               ),
@@ -447,60 +451,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Section Compte
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.account_circle, color: Colors.deepPurple),
-                        SizedBox(width: 12),
-                        Text(
-                          'Compte',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      leading: const Icon(Icons.info, color: Colors.grey),
-                      title: const Text('Version de l\'application'),
-                      subtitle: const Text('1.0.0'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.privacy_tip,
-                        color: Colors.grey,
-                      ),
-                      title: const Text('Politique de confidentialité'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.help, color: Colors.grey),
-                      title: const Text('Aide et support'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
 
             // Bouton de déconnexion

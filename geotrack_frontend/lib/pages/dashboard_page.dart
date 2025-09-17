@@ -28,6 +28,7 @@ class _DashboardPageState extends State<DashboardPage>
   Timer? _collectTimer;
   Timer? _syncTimer;
   Timer? _statsTimer;
+  Timer? _prefsCheckTimer;
 
   DateTime? _nextCollection;
   DateTime? _nextSync;
@@ -51,6 +52,7 @@ class _DashboardPageState extends State<DashboardPage>
     _loadStats();
     _loadPendingData();
     _loadHistoryData();
+    _startPreferencesChecker();
   }
 
   Future<void> _initIntervalsAndTimers() async {
@@ -94,9 +96,24 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _loadHistoryData() async {
     setState(() => _historyLoading = true);
-    final data = await _storageService.getAllGpsData();
+
+    final pendingData = await _storageService.getPendingGpsData();
+    final syncedData = await _storageService.getSyncedGpsData();
+
+    // S'assurer que les données en attente ont synced: false
+    final pendingWithStatus =
+        pendingData.map((data) => data.copyWith(synced: false)).toList();
+
+    // S'assurer que les données synchronisées ont synced: true
+    final syncedWithStatus =
+        syncedData.map((data) => data.copyWith(synced: true)).toList();
+
+    // Combiner toutes les données et trier par timestamp
+    final allData = [...pendingWithStatus, ...syncedWithStatus];
+    allData.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     setState(() {
-      _historyData = data;
+      _historyData = allData;
       _historyLoading = false;
     });
   }
@@ -106,6 +123,7 @@ class _DashboardPageState extends State<DashboardPage>
     _collectTimer?.cancel();
     _syncTimer?.cancel();
     _statsTimer?.cancel();
+    _prefsCheckTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -146,23 +164,62 @@ class _DashboardPageState extends State<DashboardPage>
     });
   }
 
+  // Nouvelle méthode pour vérifier les changements de préférences
+  void _startPreferencesChecker() {
+    _prefsCheckTimer = Timer.periodic(const Duration(seconds: 2), (
+      timer,
+    ) async {
+      final prefs = await SharedPreferences.getInstance();
+      final newCollectInterval = prefs.getInt('collect_interval') ?? 5;
+      final newSyncInterval = prefs.getInt('sync_interval') ?? 10;
+
+      if (newCollectInterval != _collectInterval ||
+          newSyncInterval != _syncInterval) {
+        if (mounted) {
+          await _restartTimersWithNewIntervals();
+        }
+      }
+    });
+  }
+
+  // Nouvelle méthode pour redémarrer les timers avec les nouveaux intervalles
+  Future<void> _restartTimersWithNewIntervals() async {
+    // Annuler les timers existants
+    _collectTimer?.cancel();
+    _syncTimer?.cancel();
+
+    // Recharger les intervalles depuis SharedPreferences
+    await _loadIntervals();
+
+    // Redémarrer les timers avec les nouveaux intervalles
+    _startAutoCollect();
+    _startAutoSync();
+
+    // Mettre à jour les compteurs
+    setState(() {
+      _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
+      _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
+    });
+  }
+
   Future<void> _autoCollect() async {
     try {
       final location = await _gpsService.getCurrentLocation();
       await _storageService.savePendingGpsData(location);
       await _loadStats();
-      await _loadPendingData();
-      await _loadHistoryData();
+      await _loadPendingData(); // Recharger les données en attente
+      await _loadHistoryData(); // Recharger l'historique
     } catch (_) {}
   }
 
   Future<void> _autoSync() async {
     try {
       await _syncService.syncPendingData();
-      await _loadStats();
-      await _loadPendingData();
-      await _loadHistoryData();
-    } catch (_) {}
+      // Recharger toutes les données après synchronisation
+      await Future.wait([_loadStats(), _loadPendingData(), _loadHistoryData()]);
+    } catch (e) {
+      print('❌ Auto sync error: $e');
+    }
   }
 
   String _formatCountdown(DateTime? target) {
@@ -178,6 +235,20 @@ class _DashboardPageState extends State<DashboardPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await Future.wait([
+            _loadPendingData(),
+            _loadHistoryData(),
+            _loadStats(),
+          ]);
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Données rafraîchies')));
+        },
+        child: Icon(Icons.refresh),
+        backgroundColor: Colors.green[700],
+      ),
       appBar: AppBar(
         title: const Text(
           'Nexor GeoTrack',
@@ -189,11 +260,16 @@ class _DashboardPageState extends State<DashboardPage>
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
-                ),
+            onPressed: () async {
+              final needsRefresh = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+
+              if (needsRefresh == true && mounted) {
+                await _restartTimersWithNewIntervals();
+              }
+            },
           ),
         ],
         bottom: TabBar(
@@ -243,68 +319,93 @@ class _DashboardPageState extends State<DashboardPage>
 
   Widget _buildPendingDataList() {
     if (_pendingData.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Column(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 48),
-            SizedBox(height: 8),
-            Text(
-              'Toutes les données sont synchronisées',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
+      return RefreshIndicator(
+        onRefresh: () async {
+          await _loadPendingData();
+          await _loadHistoryData();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(12),
             ),
-          ],
+            child: const Column(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 48),
+                SizedBox(height: 8),
+                Text(
+                  'Toutes les données sont synchronisées',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.pending_actions, color: Colors.orange),
-            title: const Text('Données en attente'),
-            trailing: Chip(
-              label: Text('${_pendingData.length}'),
-              backgroundColor: Colors.orange.withOpacity(0.2),
-            ),
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadPendingData();
+        await _loadHistoryData();
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
-          const Divider(height: 1),
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              itemCount: _pendingData.length,
-              itemBuilder: (context, index) {
-                final data = _pendingData[index];
-                return ListTile(
-                  leading: const Icon(Icons.location_on, size: 20),
-                  title: Text(
-                    '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  subtitle: Text(
-                    DateFormat('dd/MM HH:mm').format(data.timestamp),
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: Icon(
-                    data.synced ?? false
-                        ? Icons.check_circle
-                        : Icons.access_time,
-                    color: data.synced ?? false ? Colors.green : Colors.orange,
-                    size: 20,
-                  ),
-                  dense: true,
-                );
-              },
-            ),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(
+                  Icons.pending_actions,
+                  color: Colors.orange,
+                ),
+                title: const Text('Données en attente'),
+                trailing: Chip(
+                  label: Text('${_pendingData.length}'),
+                  backgroundColor: Colors.orange.withOpacity(0.2),
+                ),
+              ),
+              const Divider(height: 1),
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  itemCount: _pendingData.length,
+                  itemBuilder: (context, index) {
+                    final data = _pendingData[index];
+                    return ListTile(
+                      leading: const Icon(Icons.location_on, size: 20),
+                      title: Text(
+                        '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      subtitle: Text(
+                        DateFormat('dd/MM HH:mm').format(data.timestamp),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: Icon(
+                        data.synced ?? false
+                            ? Icons.check_circle
+                            : Icons.access_time,
+                        color:
+                            data.synced ?? false ? Colors.green : Colors.orange,
+                        size: 20,
+                      ),
+                      dense: true,
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -316,49 +417,49 @@ class _DashboardPageState extends State<DashboardPage>
     if (_historyData.isEmpty) {
       return const Center(child: Text('Aucune donnée historique disponible'));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _historyData.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final data = _historyData[index];
-        return Card(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: ListTile(
-            leading: Icon(
-              data.synced ?? false ? Icons.check_circle : Icons.location_on,
-              color: data.synced ?? false ? Colors.green : Colors.blue,
-            ),
-            title: Text(
-              '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              DateFormat('dd/MM/yyyy HH:mm').format(data.timestamp),
-              style: const TextStyle(fontSize: 13),
-            ),
-            trailing:
-                data.synced ?? false
-                    ? const Text(
-                      'Synchronisé',
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
-                    : const Text(
-                      'En attente',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-          ),
-        );
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _loadPendingData();
+        await _loadHistoryData();
       },
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _historyData.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final data = _historyData[index];
+          final isSynced = data.synced ?? false;
+
+          return Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: ListTile(
+              leading: Icon(
+                isSynced ? Icons.check_circle : Icons.location_on,
+                color: isSynced ? Colors.green : Colors.blue,
+              ),
+              title: Text(
+                '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(
+                DateFormat('dd/MM/yyyy HH:mm').format(data.timestamp),
+                style: const TextStyle(fontSize: 13),
+              ),
+              trailing: Text(
+                isSynced ? 'Synchronisé' : 'En attente',
+                style: TextStyle(
+                  color: isSynced ? Colors.green : Colors.orange,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 

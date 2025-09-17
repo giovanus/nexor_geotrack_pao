@@ -16,20 +16,42 @@ class SyncService {
         return;
       }
 
+      if (pendingData.isEmpty) {
+        print('✅ No pending data to sync');
+        return;
+      }
+
+      // Nouvelle liste pour les données synchronisées avec succès
+      final List<GpsData> successfullySynced = [];
+
       for (final data in pendingData) {
         if (data.id == null) {
           print('❌ Failed to sync data: id is null, skipping this entry.');
           continue;
         }
         try {
+          // Envoyer les données à l'API
           await _apiService.sendGpsData(data);
-          await _storageService.removePendingGpsData(data.id!);
-          await _storageService.saveSyncedGpsData(data); // Ajout ici
+
+          // Marquer la donnée comme synchronisée et l'ajouter à la liste
+          final syncedData = data.copyWith(synced: true);
+          successfullySynced.add(syncedData);
+
           print('✅ Data synced successfully: ${data.id}');
         } catch (e) {
           print('❌ Failed to sync data ${data.id}: $e');
+          // Ne pas ajouter à successfullySynced en cas d'erreur
         }
       }
+
+      // Supprimer toutes les données synchronisées de la liste d'attente
+      for (final syncedData in successfullySynced) {
+        await _storageService.removePendingGpsData(syncedData.id!);
+        // Sauvegarder dans les données synchronisées
+        await _storageService.saveSyncedGpsData(syncedData);
+      }
+
+      print('✅ Sync completed: ${successfullySynced.length} data synced');
     } catch (e) {
       print('❌ Sync failed: $e');
     }
