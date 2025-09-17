@@ -447,60 +447,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Section Compte
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.account_circle, color: Colors.green),
-                        SizedBox(width: 12),
-                        Text(
-                          'Compte',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    ListTile(
-                      leading: const Icon(Icons.info, color: Colors.grey),
-                      title: const Text('Version de l\'application'),
-                      subtitle: const Text('1.0.0'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(
-                        Icons.privacy_tip,
-                        color: Colors.grey,
-                      ),
-                      title: const Text('Politique de confidentialité'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.help, color: Colors.grey),
-                      title: const Text('Aide et support'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
 
             // Bouton de déconnexion
