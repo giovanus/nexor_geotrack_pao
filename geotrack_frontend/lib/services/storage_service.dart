@@ -65,49 +65,59 @@ class StorageService {
 
   /// Retourne toutes les données GPS (en attente et synchronisées)
   Future<List<GpsData>> getAllGpsData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final pendingJsonString = prefs.getString(_pendingDataKey);
-    final syncedJsonString = prefs.getString(_syncedDataKey);
+    final pendingData = await getPendingGpsData();
+    final syncedData = await getSyncedGpsData();
 
-    List<GpsData> allData = [];
-
-    // Ajoute les données en attente
-    if (pendingJsonString != null) {
-      try {
-        final List<dynamic> pendingJsonList = json.decode(pendingJsonString);
-        allData.addAll(
-          pendingJsonList.map((json) => GpsData.fromJson(json)).toList(),
-        );
-      } catch (e) {}
-    }
-
-    // Ajoute les données synchronisées
-    if (syncedJsonString != null) {
-      try {
-        final List<dynamic> syncedJsonList = json.decode(syncedJsonString);
-        allData.addAll(
-          syncedJsonList.map((json) => GpsData.fromJson(json)).toList(),
-        );
-      } catch (e) {}
-    }
+    // Combiner et trier par timestamp décroissant
+    final allData = [...pendingData, ...syncedData];
+    allData.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     return allData;
   }
 
   Future<void> saveSyncedGpsData(GpsData data) async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_syncedDataKey);
+    final syncedData = await getSyncedGpsData();
 
-    List<GpsData> syncedData = [];
-    if (jsonString != null) {
-      final List<dynamic> jsonList = json.decode(jsonString);
-      syncedData = jsonList.map((json) => GpsData.fromJson(json)).toList();
+    // Vérifier si la donnée existe déjà pour éviter les doublons
+    final existingIndex = syncedData.indexWhere((d) => d.id == data.id);
+    if (existingIndex != -1) {
+      // Mettre à jour la donnée existante
+      syncedData[existingIndex] = data.copyWith(synced: true);
+    } else {
+      // Ajouter la nouvelle donnée synchronisée
+      syncedData.add(data.copyWith(synced: true));
     }
-    // Marquer comme synchronisé
-    final synced = data.copyWith(synced: true);
-    syncedData.add(synced);
 
-    final jsonList = syncedData.map((e) => e.toJson()).toList();
+    final jsonList =
+        syncedData
+            .map(
+              (e) => {
+                ...e.toJson(),
+                'synced': true, // S'assurer que synced est bien sauvegardé
+                'id': e.id, // S'assurer que l'ID est sauvegardé
+              },
+            )
+            .toList();
+
     await prefs.setString(_syncedDataKey, json.encode(jsonList));
+  }
+
+  // Ajouter cette méthode pour récupérer uniquement les données synchronisées
+  Future<List<GpsData>> getSyncedGpsData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final syncedJsonString = prefs.getString(_syncedDataKey);
+
+    if (syncedJsonString == null) {
+      return [];
+    }
+
+    try {
+      final List<dynamic> syncedJsonList = json.decode(syncedJsonString);
+      return syncedJsonList.map((json) => GpsData.fromJson(json)).toList();
+    } catch (e) {
+      print('❌ Error decoding synced data: $e');
+      return [];
+    }
   }
 }

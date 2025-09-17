@@ -151,7 +151,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paramètres'),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.green,
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -173,7 +173,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     children: [
                       const Row(
                         children: [
-                          Icon(Icons.timer, color: Colors.deepPurple),
+                          Icon(Icons.timer, color: Colors.green),
                           SizedBox(width: 12),
                           Text(
                             'Intervalles de Synchronisation',
@@ -233,7 +233,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: _saveSettings,
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: Colors.deepPurple,
+                            backgroundColor: Colors.green,
                             foregroundColor: Colors.white,
                           ),
                         ),
@@ -258,7 +258,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.lock, color: Colors.deepPurple),
+                        const Icon(Icons.lock, color: Colors.green),
                         const SizedBox(width: 12),
                         const Text(
                           'Sécurité',
@@ -273,7 +273,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             _showPinSection
                                 ? Icons.expand_less
                                 : Icons.expand_more,
-                            color: Colors.deepPurple,
+                            color: Colors.green,
                           ),
                           onPressed: () {
                             setState(() {
@@ -433,7 +433,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 16,
                                   ),
-                                  backgroundColor: Colors.deepPurple,
+                                  backgroundColor: Colors.green,
                                   foregroundColor: Colors.white,
                                 ),
                               ),
@@ -461,7 +461,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.account_circle, color: Colors.deepPurple),
+                        Icon(Icons.account_circle, color: Colors.green),
                         SizedBox(width: 12),
                         Text(
                           'Compte',

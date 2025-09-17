@@ -36,10 +36,13 @@ class GpsData {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'device_id': deviceId,
       'lat': lat,
       'lon': lon,
       'timestamp': timestamp.toIso8601String(),
+      'synced': synced, // Ajouter synced au JSON
+      'created_at': createdAt?.toIso8601String(),
     };
   }
 
