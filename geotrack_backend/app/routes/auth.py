@@ -130,6 +130,9 @@ async def forgot_pin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de l'envoi de l'email: {str(e)}"
         )
+        
+        
+        
 
 async def send_pin_email(email: str, new_pin: str):
     # Configuration SMTP (à mettre dans les variables d'environnement)
@@ -164,3 +167,4 @@ async def send_pin_email(email: str, new_pin: str):
         server.starttls()
         server.login(smtp_username, smtp_password)
         server.send_message(msg)
+        

@@ -24,14 +24,11 @@ def get_pin_hash(pin):
     return pwd_context.hash(pin)
 
 def authenticate_user(db: Session, pin: str):
-    user = db.query(User).first()
-    if not user:
-        return None
-    
-    if not verify_pin(pin, user.hashed_pin):
-        return None
-    
-    return user
+    users = db.query(User).all()
+    for user in users:
+        if verify_pin(pin, user.hashed_pin):
+            return user
+    return None
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
