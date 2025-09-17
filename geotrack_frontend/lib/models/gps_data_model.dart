@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 class GpsData {
   final String? id;
   final String deviceId;
@@ -8,14 +10,14 @@ class GpsData {
   final DateTime? createdAt;
 
   GpsData({
-    this.id,
+    String? id,
     required this.deviceId,
     required this.lat,
     required this.lon,
     required this.timestamp,
     this.synced,
     this.createdAt,
-  });
+  }) : id = id ?? const Uuid().v4();
 
   factory GpsData.fromJson(Map<String, dynamic> json) {
     return GpsData(
@@ -39,5 +41,17 @@ class GpsData {
       'lon': lon,
       'timestamp': timestamp.toIso8601String(),
     };
+  }
+
+  GpsData copyWith({bool? synced}) {
+    return GpsData(
+      id: id,
+      deviceId: deviceId,
+      lat: lat,
+      lon: lon,
+      timestamp: timestamp,
+      synced: synced ?? this.synced,
+      // autres champs...
+    );
   }
 }
