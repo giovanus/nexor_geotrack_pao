@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:geotrack_frontend/services/auth_service.dart'; // Changé ici
+import 'package:geotrack_frontend/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -14,12 +14,25 @@ class _SettingsPageState extends State<SettingsPage> {
   final TextEditingController _collectIntervalController =
       TextEditingController();
   final TextEditingController _syncIntervalController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _oldPinController = TextEditingController();
+  final TextEditingController _newPinController = TextEditingController();
+  final TextEditingController _confirmPinController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+
+  final _settingsFormKey = GlobalKey<FormState>();
+  final _pinFormKey = GlobalKey<FormState>();
+
+  bool _obscureOldPin = true;
+  bool _obscureNewPin = true;
+  bool _obscureConfirmPin = true;
+  bool _isChangingPin = false;
+  bool _showPinSection = false;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
+    _loadUserEmail();
   }
 
   Future<void> _loadSettings() async {
@@ -32,8 +45,15 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _loadUserEmail() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    if (authService.userEmail != null) {
+      _emailController.text = authService.userEmail!;
+    }
+  }
+
   Future<void> _saveSettings() async {
-    if (_formKey.currentState!.validate()) {
+    if (_settingsFormKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
       final collectInterval = int.parse(_collectIntervalController.text);
       final syncInterval = int.parse(_syncIntervalController.text);
@@ -41,8 +61,6 @@ class _SettingsPageState extends State<SettingsPage> {
       await prefs.setInt('collect_interval', collectInterval);
       await prefs.setInt('sync_interval', syncInterval);
 
-      // Vous devrez peut-être adapter cette partie selon votre implémentation
-      // des tâches périodiques
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -53,12 +71,74 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _changePin() async {
+    if (_pinFormKey.currentState!.validate()) {
+      final authService = Provider.of<AuthService>(context, listen: false);
+
+      // Vérification plus robuste de l'authentification
+      if (!authService.isAuthenticated || authService.token == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Session expirée. Veuillez vous reconnecter'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Vérifier que l'email correspond à celui du token
+      final tokenEmail = authService.getEmailFromToken();
+      if (tokenEmail != _emailController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Email ne correspond pas au compte connecté'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _isChangingPin = true;
+      });
+
+      final result = await authService.changePin(
+        _emailController.text,
+        _oldPinController.text,
+        _newPinController.text,
+      );
+
+      setState(() {
+        _isChangingPin = false;
+      });
+
+      if (result['success']) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        _oldPinController.clear();
+        _newPinController.clear();
+        _confirmPinController.clear();
+        setState(() {
+          _showPinSection = false;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _logout() async {
-    final authService = Provider.of<AuthService>(
-      // Changé ici
-      context,
-      listen: false,
-    );
+    final authService = Provider.of<AuthService>(context, listen: false);
     await authService.logout();
     if (!mounted) return;
     Navigator.pushReplacementNamed(context, '/login');
@@ -66,6 +146,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Paramètres'),
@@ -74,18 +156,18 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              // Section Intervalles
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            // Section Intervalles
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Form(
+                  key: _settingsFormKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -160,81 +242,284 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
-              // Section Compte
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.account_circle, color: Colors.deepPurple),
-                          SizedBox(width: 12),
-                          Text(
-                            'Compte',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+            // Section Modification du PIN
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.lock, color: Colors.deepPurple),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Sécurité',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      ListTile(
-                        leading: const Icon(Icons.info, color: Colors.grey),
-                        title: const Text('Version de l\'application'),
-                        subtitle: const Text('1.0.0'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {},
-                      ),
-                      const Divider(),
-                      ListTile(
-                        leading: const Icon(
-                          Icons.privacy_tip,
-                          color: Colors.grey,
                         ),
-                        title: const Text('Politique de confidentialité'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {},
-                      ),
-                      const Divider(),
-                      ListTile(
-                        leading: const Icon(Icons.help, color: Colors.grey),
-                        title: const Text('Aide et support'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {},
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(
+                            _showPinSection
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.deepPurple,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _showPinSection = !_showPinSection;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+
+                    if (_showPinSection) ...[
+                      const SizedBox(height: 16),
+                      Form(
+                        key: _pinFormKey,
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _emailController,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.email),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Veuillez entrer votre email';
+                                }
+                                if (!RegExp(
+                                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                                ).hasMatch(value)) {
+                                  return 'Email invalide';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _oldPinController,
+                              obscureText: _obscureOldPin,
+                              decoration: InputDecoration(
+                                labelText: 'Ancien PIN',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.lock_outline),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureOldPin
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureOldPin = !_obscureOldPin;
+                                    });
+                                  },
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 4,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Veuillez entrer votre ancien PIN';
+                                }
+                                if (value.length != 4) {
+                                  return 'Le PIN doit contenir 4 chiffres';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _newPinController,
+                              obscureText: _obscureNewPin,
+                              decoration: InputDecoration(
+                                labelText: 'Nouveau PIN',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.lock),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureNewPin
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureNewPin = !_obscureNewPin;
+                                    });
+                                  },
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 4,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Veuillez entrer un nouveau PIN';
+                                }
+                                if (value.length != 4) {
+                                  return 'Le PIN doit contenir 4 chiffres';
+                                }
+                                if (value == _oldPinController.text) {
+                                  return 'Le nouveau PIN doit être différent';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _confirmPinController,
+                              obscureText: _obscureConfirmPin,
+                              decoration: InputDecoration(
+                                labelText: 'Confirmer le nouveau PIN',
+                                border: const OutlineInputBorder(),
+                                prefixIcon: const Icon(Icons.lock),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureConfirmPin
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _obscureConfirmPin = !_obscureConfirmPin;
+                                    });
+                                  },
+                                ),
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 4,
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Veuillez confirmer votre PIN';
+                                }
+                                if (value != _newPinController.text) {
+                                  return 'Les PIN ne correspondent pas';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                icon:
+                                    _isChangingPin
+                                        ? const CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        )
+                                        : const Icon(Icons.lock_reset),
+                                label: Text(
+                                  _isChangingPin
+                                      ? 'Modification...'
+                                      : 'Modifier le PIN',
+                                ),
+                                onPressed: _isChangingPin ? null : _changePin,
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  backgroundColor: Colors.deepPurple,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
-              // Bouton de déconnexion
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.logout, color: Colors.red),
-                  label: const Text(
-                    'Déconnexion',
-                    style: TextStyle(color: Colors.red),
-                  ),
-                  onPressed: _logout,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(color: Colors.red),
-                  ),
+            // Section Compte
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.account_circle, color: Colors.deepPurple),
+                        SizedBox(width: 12),
+                        Text(
+                          'Compte',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    ListTile(
+                      leading: const Icon(Icons.info, color: Colors.grey),
+                      title: const Text('Version de l\'application'),
+                      subtitle: const Text('1.0.0'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {},
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.privacy_tip,
+                        color: Colors.grey,
+                      ),
+                      title: const Text('Politique de confidentialité'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {},
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(Icons.help, color: Colors.grey),
+                      title: const Text('Aide et support'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () {},
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+
+            // Bouton de déconnexion
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.logout, color: Colors.red),
+                label: const Text(
+                  'Déconnexion',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onPressed: _logout,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: const BorderSide(color: Colors.red),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -244,6 +529,10 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _collectIntervalController.dispose();
     _syncIntervalController.dispose();
+    _oldPinController.dispose();
+    _newPinController.dispose();
+    _confirmPinController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 }

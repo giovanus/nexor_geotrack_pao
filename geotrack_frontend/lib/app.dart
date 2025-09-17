@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geotrack_frontend/pages/dashboard_page.dart';
+import 'package:geotrack_frontend/pages/forgot_pin_page.dart';
 import 'package:geotrack_frontend/pages/login_page.dart';
 import 'package:geotrack_frontend/services/auth_service.dart';
 import 'package:geotrack_frontend/services/storage_service.dart';
@@ -41,6 +42,7 @@ class GeoTrackApp extends StatelessWidget {
         routes: {
           '/login': (context) => const LoginPage(),
           '/dashboard': (context) => const DashboardPage(),
+          '/forgot-pin': (context) => const ForgotPinPage(),
         },
       ),
     );

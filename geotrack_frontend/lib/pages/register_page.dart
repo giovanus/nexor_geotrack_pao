@@ -1,44 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:geotrack_frontend/pages/register_page.dart';
 import 'package:provider/provider.dart';
 import 'package:geotrack_frontend/services/auth_service.dart';
-import 'package:geotrack_frontend/pages/forgot_pin_page.dart';
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
 
   @override
-  _LoginPageState createState() => _LoginPageState();
+  _RegisterPageState createState() => _RegisterPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _RegisterPageState extends State<RegisterPage> {
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _pinController = TextEditingController();
+  final TextEditingController _confirmPinController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _obscurePin = true;
+  bool _obscureConfirmPin = true;
 
-  // Couleurs personnalisées
   final Color _primaryGreen = const Color(0xFF2ECC40);
-  final Color _backgroundWhite = Colors.white;
-
-  @override
-  void initState() {
-    super.initState();
-    _pinController.addListener(() {
-      setState(() {});
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-
     return Scaffold(
-      backgroundColor: _backgroundWhite,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: _primaryGreen,
         elevation: 0,
-        title: const Text(''),
+        title: const Text('Créer un compte'),
+        foregroundColor: Colors.white,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -56,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     padding: const EdgeInsets.all(24),
                     child: Icon(
-                      Icons.location_on,
+                      Icons.person_add,
                       size: 80,
                       color: _primaryGreen,
                     ),
@@ -71,11 +61,46 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Entrez votre PIN',
-                    style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                  const Text(
+                    'Créez votre compte',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                   const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      labelStyle: TextStyle(color: _primaryGreen),
+                      filled: true,
+                      fillColor: _primaryGreen.withOpacity(0.08),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen, width: 2),
+                      ),
+                      prefixIcon: Icon(Icons.email, color: _primaryGreen),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Veuillez entrer votre email';
+                      }
+                      if (!RegExp(
+                        r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      ).hasMatch(value)) {
+                        return 'Email invalide';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _pinController,
                     obscureText: _obscurePin,
@@ -114,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                     maxLength: 4,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Veuillez entrer votre PIN';
+                        return 'Veuillez créer un PIN';
                       }
                       if (value.length != 4) {
                         return 'Le PIN doit contenir 4 chiffres';
@@ -123,27 +148,55 @@ class _LoginPageState extends State<LoginPage> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  if (authService.isBlocked())
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Compte verrouillé. Réessayez dans ${authService.getRemainingBlockTime().inSeconds} secondes',
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
+                  TextFormField(
+                    controller: _confirmPinController,
+                    obscureText: _obscureConfirmPin,
+                    decoration: InputDecoration(
+                      labelText: 'Confirmer le PIN',
+                      labelStyle: TextStyle(color: _primaryGreen),
+                      filled: true,
+                      fillColor: _primaryGreen.withOpacity(0.08),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryGreen, width: 2),
+                      ),
+                      prefixIcon: Icon(Icons.lock, color: _primaryGreen),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirmPin
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: _primaryGreen,
                         ),
-                        textAlign: TextAlign.center,
+                        onPressed: () {
+                          setState(() {
+                            _obscureConfirmPin = !_obscureConfirmPin;
+                          });
+                        },
                       ),
+                      counterText: '',
                     ),
-                  if (authService.failedAttempts > 0 &&
-                      !authService.isBlocked())
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Tentatives échouées: ${authService.failedAttempts}/3',
-                        style: TextStyle(color: Colors.orange[700]),
-                      ),
-                    ),
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Veuillez confirmer votre PIN';
+                      }
+                      if (value != _pinController.text) {
+                        return 'Les PIN ne correspondent pas';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     height: 48,
@@ -156,17 +209,14 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         elevation: 2,
                       ),
-                      onPressed:
-                          authService.isBlocked() || _isLoading
-                              ? null
-                              : _handleLogin,
+                      onPressed: _isLoading ? null : _handleRegister,
                       child:
                           _isLoading
                               ? const CircularProgressIndicator(
                                 color: Colors.white,
                               )
                               : const Text(
-                                'Connexion',
+                                'Créer le compte',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -174,52 +224,15 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed:
-                        authService.isBlocked()
-                            ? null
-                            : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const RegisterPage(),
-                                ),
-                              );
-                            },
-                    child: Text(
-                      'Créer un compte',
-                      style: TextStyle(
-                        color:
-                            authService.isBlocked()
-                                ? Colors.grey
-                                : _primaryGreen,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed:
-                        authService.isBlocked()
-                            ? null
-                            : () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const ForgotPinPage(),
-                                ),
-                              );
-                            },
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
                     child: Text(
-                      'Code PIN oublié ?',
+                      'Déjà un compte ? Se connecter',
                       style: TextStyle(
-                        color:
-                            authService.isBlocked()
-                                ? Colors.grey
-                                : _primaryGreen,
+                        color: _primaryGreen,
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
                         decoration: TextDecoration.underline,
@@ -235,7 +248,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleRegister() async {
     if (_formKey.currentState!.validate()) {
       FocusScope.of(context).unfocus();
 
@@ -243,19 +256,31 @@ class _LoginPageState extends State<LoginPage> {
         _isLoading = true;
       });
 
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final result = await authService.login(_pinController.text);
+      // Appel de la vraie fonction d'inscription
+      final result = await register(_emailController.text, _pinController.text);
 
       setState(() {
         _isLoading = false;
       });
 
-      if (result.success) {
-        Navigator.pushReplacementNamed(context, '/dashboard');
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message']),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+
+        // Rediriger vers la page de connexion
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(result.error ?? 'Échec de la connexion'),
+            content: Text(result['message']),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -269,7 +294,9 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    _emailController.dispose();
     _pinController.dispose();
+    _confirmPinController.dispose();
     super.dispose();
   }
 }
