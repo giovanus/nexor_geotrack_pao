@@ -62,6 +62,10 @@ class _SettingsPageState extends State<SettingsPage> {
       await prefs.setInt('sync_interval', syncInterval);
 
       if (!mounted) return;
+
+      // Retourner true pour indiquer que les paramètres ont été modifiés
+      Navigator.pop(context, true);
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Paramètres sauvegardés avec succès'),

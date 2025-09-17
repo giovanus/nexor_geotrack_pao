@@ -28,6 +28,7 @@ class _DashboardPageState extends State<DashboardPage>
   Timer? _collectTimer;
   Timer? _syncTimer;
   Timer? _statsTimer;
+  Timer? _prefsCheckTimer;
 
   DateTime? _nextCollection;
   DateTime? _nextSync;
@@ -51,6 +52,7 @@ class _DashboardPageState extends State<DashboardPage>
     _loadStats();
     _loadPendingData();
     _loadHistoryData();
+    _startPreferencesChecker();
   }
 
   Future<void> _initIntervalsAndTimers() async {
@@ -121,6 +123,7 @@ class _DashboardPageState extends State<DashboardPage>
     _collectTimer?.cancel();
     _syncTimer?.cancel();
     _statsTimer?.cancel();
+    _prefsCheckTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -158,6 +161,44 @@ class _DashboardPageState extends State<DashboardPage>
   void _startStatsTimer() {
     _statsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {});
+    });
+  }
+
+  // Nouvelle méthode pour vérifier les changements de préférences
+  void _startPreferencesChecker() {
+    _prefsCheckTimer = Timer.periodic(const Duration(seconds: 2), (
+      timer,
+    ) async {
+      final prefs = await SharedPreferences.getInstance();
+      final newCollectInterval = prefs.getInt('collect_interval') ?? 5;
+      final newSyncInterval = prefs.getInt('sync_interval') ?? 10;
+
+      if (newCollectInterval != _collectInterval ||
+          newSyncInterval != _syncInterval) {
+        if (mounted) {
+          await _restartTimersWithNewIntervals();
+        }
+      }
+    });
+  }
+
+  // Nouvelle méthode pour redémarrer les timers avec les nouveaux intervalles
+  Future<void> _restartTimersWithNewIntervals() async {
+    // Annuler les timers existants
+    _collectTimer?.cancel();
+    _syncTimer?.cancel();
+
+    // Recharger les intervalles depuis SharedPreferences
+    await _loadIntervals();
+
+    // Redémarrer les timers avec les nouveaux intervalles
+    _startAutoCollect();
+    _startAutoSync();
+
+    // Mettre à jour les compteurs
+    setState(() {
+      _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
+      _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
     });
   }
 
@@ -219,11 +260,16 @@ class _DashboardPageState extends State<DashboardPage>
         actions: [
           IconButton(
             icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsPage()),
-                ),
+            onPressed: () async {
+              final needsRefresh = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+
+              if (needsRefresh == true && mounted) {
+                await _restartTimersWithNewIntervals();
+              }
+            },
           ),
         ],
         bottom: TabBar(
