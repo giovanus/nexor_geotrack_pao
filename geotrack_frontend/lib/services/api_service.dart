@@ -45,17 +45,27 @@ class ApiService {
       final apiUrl = await _getApiUrl();
       final headers = await _getHeaders();
 
+      final body = {
+        "device_id":
+            data.deviceId, // Assure-toi que ce champ existe et est renseigné
+        "lat": data.lat,
+        "lon": data.lon,
+        "timestamp": data.timestamp.toIso8601String(),
+      };
+
       final response = await http.post(
         Uri.parse('$apiUrl/data/'),
         headers: headers,
-        body: json.encode(data.toJson()),
+        body: json.encode(body),
       );
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
         return GpsData.fromJson(responseData);
       } else {
-        throw Exception('Failed to send GPS data: ${response.statusCode}');
+        throw Exception(
+          'Failed to send GPS data: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       throw Exception('Failed to send GPS data: $e');

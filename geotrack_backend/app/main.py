@@ -8,9 +8,9 @@ from dotenv import load_dotenv
 # Charger les variables d'environnement
 load_dotenv()
 
-from .database import engine, get_db
-from .models import Base
-from .routes import auth, config, data
+from app.database import engine, get_db
+from app.models import Base
+from app.routes import auth, config, data
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

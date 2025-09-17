@@ -1,5 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:geotrack_frontend/models/gps_data_model.dart';
+import 'package:uuid/uuid.dart';
 
 class GpsService {
   Future<bool> checkPermission() async {
@@ -38,6 +39,7 @@ class GpsService {
       );
 
       return GpsData(
+        id: const Uuid().v4(),
         deviceId: await _getDeviceId(),
         lat: position.latitude,
         lon: position.longitude,

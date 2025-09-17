@@ -17,9 +17,14 @@ class SyncService {
       }
 
       for (final data in pendingData) {
+        if (data.id == null) {
+          print('❌ Failed to sync data: id is null, skipping this entry.');
+          continue;
+        }
         try {
           await _apiService.sendGpsData(data);
           await _storageService.removePendingGpsData(data.id!);
+          await _storageService.saveSyncedGpsData(data); // Ajout ici
           print('✅ Data synced successfully: ${data.id}');
         } catch (e) {
           print('❌ Failed to sync data ${data.id}: $e');

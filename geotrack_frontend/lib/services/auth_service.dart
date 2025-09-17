@@ -95,9 +95,9 @@ class AuthService with ChangeNotifier {
     _failedAttempts++;
     _lastFailedAttempt = DateTime.now();
 
-    // Si 3 tentatives échouées, bloquer pendant 15 minutes
+    // Si 3 tentatives échouées, bloquer pendant 30 secondes
     if (_failedAttempts >= 3 || isLocked) {
-      _lastFailedAttempt = DateTime.now().add(const Duration(minutes: 15));
+      _lastFailedAttempt = DateTime.now().add(const Duration(seconds: 30));
     }
 
     notifyListeners();

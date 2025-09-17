@@ -1,10 +1,22 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
 
 class LoginRequest(BaseModel):
     pin: str  
+    
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    pin: str    
 
+class ChangePinRequest(BaseModel):
+    email: EmailStr
+    old_pin: str
+    new_pin: str
+
+class ForgotPinRequest(BaseModel):
+    email: EmailStr
+    
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str

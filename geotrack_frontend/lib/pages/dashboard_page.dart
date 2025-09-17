@@ -7,9 +7,9 @@ import 'package:geotrack_frontend/services/gps_service.dart';
 import 'package:geotrack_frontend/services/sync_service.dart';
 import 'package:geotrack_frontend/services/storage_service.dart';
 import 'package:geotrack_frontend/widgets/connection_status.dart';
-import 'package:geotrack_frontend/widgets/sync_indicator.dart';
 import 'package:geotrack_frontend/pages/settings_page.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -18,49 +18,161 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
-  final AuthService _authService = AuthService();
+class _DashboardPageState extends State<DashboardPage>
+    with TickerProviderStateMixin {
   final GpsService _gpsService = GpsService();
   final SyncService _syncService = SyncService();
   final StorageService _storageService = StorageService();
 
   Map<String, dynamic> _stats = {};
+  Timer? _collectTimer;
+  Timer? _syncTimer;
   Timer? _statsTimer;
+
+  DateTime? _nextCollection;
+  DateTime? _nextSync;
+
+  late TabController _tabController;
+
+  int _collectInterval = 5;
+  int _syncInterval = 10;
+
+  // Ajout des variables d'état pour les données
+  List<GpsData> _pendingData = [];
+  List<GpsData> _historyData = [];
+  bool _pendingLoading = true;
+  bool _historyLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _initializeServices();
+    _tabController = TabController(length: 2, vsync: this);
+    _initIntervalsAndTimers();
+    _loadStats();
+    _loadPendingData();
+    _loadHistoryData();
+  }
+
+  Future<void> _initIntervalsAndTimers() async {
+    await _loadIntervals();
+    // Première collecte dès l'ouverture
+    await _autoCollect();
+    _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
+    await _loadPendingData();
+    await _loadHistoryData();
+    _startAutoCollect();
+    _startAutoSync();
     _startStatsTimer();
+  }
+
+  Future<void> _loadIntervals() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _collectInterval = prefs.getInt('collect_interval') ?? 5;
+      _syncInterval = prefs.getInt('sync_interval') ?? 10;
+      _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
+      _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
+    });
+  }
+
+  Future<void> _loadStats() async {
+    setState(() {
+      _stats = {'pending_count': _pendingData.length, 'last_collection': null};
+    });
+    // À compléter selon tes besoins
+  }
+
+  Future<void> _loadPendingData() async {
+    setState(() => _pendingLoading = true);
+    final data = await _storageService.getPendingGpsData();
+    setState(() {
+      _pendingData = data;
+      _pendingLoading = false;
+      _stats['pending_count'] = data.length;
+    });
+  }
+
+  Future<void> _loadHistoryData() async {
+    setState(() => _historyLoading = true);
+    final data = await _storageService.getAllGpsData();
+    setState(() {
+      _historyData = data;
+      _historyLoading = false;
+    });
   }
 
   @override
   void dispose() {
+    _collectTimer?.cancel();
+    _syncTimer?.cancel();
     _statsTimer?.cancel();
+    _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _initializeServices() async {
-    await _loadStats();
+  void _startAutoCollect() {
+    _collectTimer?.cancel();
+    _collectTimer = Timer.periodic(Duration(minutes: _collectInterval), (
+      timer,
+    ) async {
+      await _autoCollect();
+      setState(() {
+        _nextCollection = DateTime.now().add(
+          Duration(minutes: _collectInterval),
+        );
+      });
+      await _loadPendingData();
+      await _loadHistoryData();
+    });
   }
 
-  Future<void> _loadStats() async {
-    // Implémentez cette méthode selon vos besoins
-    // Pour l'instant, retournons des valeurs par défaut
-    setState(() {
-      _stats = {
-        'pending_count': 0,
-        'last_collection': null,
-        'next_collection': DateTime.now().add(const Duration(minutes: 5)),
-        'next_sync': DateTime.now().add(const Duration(minutes: 10)),
-      };
+  void _startAutoSync() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(Duration(minutes: _syncInterval), (
+      timer,
+    ) async {
+      await _autoSync();
+      setState(() {
+        _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
+      });
+      await _loadPendingData();
+      await _loadHistoryData();
     });
   }
 
   void _startStatsTimer() {
-    _statsTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _loadStats();
+    _statsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {});
     });
+  }
+
+  Future<void> _autoCollect() async {
+    try {
+      final location = await _gpsService.getCurrentLocation();
+      await _storageService.savePendingGpsData(location);
+      await _loadStats();
+      await _loadPendingData();
+      await _loadHistoryData();
+    } catch (_) {}
+  }
+
+  Future<void> _autoSync() async {
+    try {
+      await _syncService.syncPendingData();
+      await _loadStats();
+      await _loadPendingData();
+      await _loadHistoryData();
+    } catch (_) {}
+  }
+
+  String _formatCountdown(DateTime? target) {
+    if (target == null) return 'N/A';
+    final now = DateTime.now();
+    final diff = target.difference(now);
+    if (diff.isNegative) return 'Maintenant';
+    if (diff.inMinutes < 1) return '${diff.inSeconds}s';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}min';
+    return '${diff.inHours}h${diff.inMinutes.remainder(60)}min';
   }
 
   @override
@@ -71,7 +183,7 @@ class _DashboardPageState extends State<DashboardPage> {
           'Nexor GeoTrack',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.deepPurple,
+        backgroundColor: Colors.green[700],
         foregroundColor: Colors.white,
         elevation: 2,
         actions: [
@@ -84,46 +196,175 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
           ),
         ],
-      ),
-      body: RefreshIndicator(
-        onRefresh: _loadStats,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Status de connexion
-              const ConnectionStatus(),
-              const SizedBox(height: 16),
-
-              // Cartes de statistiques
-              _buildStatsCards(),
-              const SizedBox(height: 24),
-
-              // Titre section données
-              const Text(
-                'Données en attente de synchronisation',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              // Liste des données en attente
-              _buildPendingDataList(),
-              const SizedBox(height: 16),
-
-              // Boutons d'action
-              _buildActionButtons(),
-            ],
-          ),
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: 'Tableau de bord', icon: Icon(Icons.dashboard)),
+            Tab(text: 'Historique', icon: Icon(Icons.history)),
+          ],
         ),
       ),
+      body: Container(
+        color: Colors.white,
+        child: TabBarView(
+          controller: _tabController,
+          children: [_buildDashboardTab(), _buildHistoryTab()],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDashboardTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ConnectionStatus(),
+          const SizedBox(height: 16),
+          _buildStatsCards(),
+          const SizedBox(height: 24),
+          const Text(
+            'Données en attente de synchronisation',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          _pendingLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _buildPendingDataList(),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingDataList() {
+    if (_pendingData.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.grey[50],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 48),
+            SizedBox(height: 8),
+            Text(
+              'Toutes les données sont synchronisées',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.pending_actions, color: Colors.orange),
+            title: const Text('Données en attente'),
+            trailing: Chip(
+              label: Text('${_pendingData.length}'),
+              backgroundColor: Colors.orange.withOpacity(0.2),
+            ),
+          ),
+          const Divider(height: 1),
+          SizedBox(
+            height: 200,
+            child: ListView.builder(
+              itemCount: _pendingData.length,
+              itemBuilder: (context, index) {
+                final data = _pendingData[index];
+                return ListTile(
+                  leading: const Icon(Icons.location_on, size: 20),
+                  title: Text(
+                    '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    DateFormat('dd/MM HH:mm').format(data.timestamp),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: Icon(
+                    data.synced ?? false
+                        ? Icons.check_circle
+                        : Icons.access_time,
+                    color: data.synced ?? false ? Colors.green : Colors.orange,
+                    size: 20,
+                  ),
+                  dense: true,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    if (_historyLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_historyData.isEmpty) {
+      return const Center(child: Text('Aucune donnée historique disponible'));
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: _historyData.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final data = _historyData[index];
+        return Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ListTile(
+            leading: Icon(
+              data.synced ?? false ? Icons.check_circle : Icons.location_on,
+              color: data.synced ?? false ? Colors.green : Colors.blue,
+            ),
+            title: Text(
+              '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              DateFormat('dd/MM/yyyy HH:mm').format(data.timestamp),
+              style: const TextStyle(fontSize: 13),
+            ),
+            trailing:
+                data.synced ?? false
+                    ? const Text(
+                      'Synchronisé',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                    : const Text(
+                      'En attente',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildStatsCards() {
     return Column(
       children: [
-        // Carte principale avec indicateurs
         Card(
           elevation: 4,
           shape: RoundedRectangleBorder(
@@ -135,7 +376,7 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.analytics, color: Colors.deepPurple),
+                    Icon(Icons.analytics, color: Colors.green),
                     SizedBox(width: 8),
                     Text(
                       'Statistiques de Collecte',
@@ -157,12 +398,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     _buildStatCard(
                       '⏰ Prochaine collecte',
-                      _formatTime(_stats['next_collection']),
+                      _formatCountdown(_nextCollection),
                       Colors.blue,
                     ),
                     _buildStatCard(
                       '🔄 Prochaine sync',
-                      _formatTime(_stats['next_sync']),
+                      _formatCountdown(_nextSync),
                       Colors.green,
                     ),
                   ],
@@ -172,8 +413,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Carte dernière collecte
         Card(
           elevation: 3,
           shape: RoundedRectangleBorder(
@@ -225,7 +464,7 @@ class _DashboardPageState extends State<DashboardPage> {
             shape: BoxShape.circle,
           ),
           child: Text(
-            title.split(' ')[0], // Emoji seulement
+            title.split(' ')[0],
             style: const TextStyle(fontSize: 20),
           ),
         ),
@@ -242,181 +481,5 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       ],
     );
-  }
-
-  String _formatTime(dynamic time) {
-    if (time is! DateTime) return 'N/A';
-    final now = DateTime.now();
-    final difference = time.difference(now);
-
-    if (difference.inMinutes < 1) return 'Maintenant';
-    if (difference.inMinutes < 60) return '${difference.inMinutes}min';
-
-    return '${difference.inHours}h${difference.inMinutes.remainder(60)}min';
-  }
-
-  Widget _buildPendingDataList() {
-    return FutureBuilder<List<GpsData>>(
-      future: _storageService.getPendingGpsData(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final pendingData = snapshot.data ?? [];
-
-        if (pendingData.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Column(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green, size: 48),
-                SizedBox(height: 8),
-                Text(
-                  'Toutes les données sont synchronisées',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.pending_actions,
-                  color: Colors.orange,
-                ),
-                title: const Text('Données en attente'),
-                trailing: Chip(
-                  label: Text('${pendingData.length}'),
-                  backgroundColor: Colors.orange.withOpacity(0.2),
-                ),
-              ),
-              const Divider(height: 1),
-              SizedBox(
-                height: 200,
-                child: ListView.builder(
-                  itemCount: pendingData.length,
-                  itemBuilder: (context, index) {
-                    final data = pendingData[index];
-                    return ListTile(
-                      leading: const Icon(Icons.location_on, size: 20),
-                      title: Text(
-                        '${data.lat.toStringAsFixed(6)}, ${data.lon.toStringAsFixed(6)}',
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                      subtitle: Text(
-                        DateFormat('dd/MM HH:mm').format(data.timestamp),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      trailing: Icon(
-                        data.synced ?? false
-                            ? Icons.check_circle
-                            : Icons.access_time,
-                        color:
-                            data.synced ?? false ? Colors.green : Colors.orange,
-                        size: 20,
-                      ),
-                      dense: true,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.gps_fixed, size: 20),
-            label: const Text('Collecte Manuelle'),
-            onPressed: _manualCollect,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            icon: const Icon(Icons.sync, size: 20),
-            label: const Text('Synchroniser'),
-            onPressed: _manualSync,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _manualCollect() async {
-    try {
-      // Utiliser _gpsService pour la collecte manuelle
-      final location = await _gpsService.getCurrentLocation();
-      await _storageService.savePendingGpsData(location);
-      await _loadStats();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('📍 Position collectée avec succès'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Erreur: $e'), backgroundColor: Colors.red),
-      );
-    }
-  }
-
-  Future<void> _manualSync() async {
-    try {
-      await _syncService.syncPendingData();
-      await _loadStats();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('✅ Synchronisation réussie'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Erreur de synchronisation: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 }
