@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:geotrack_frontend/models/config_model.dart';
+import 'package:geotrack_frontend/services/api_service.dart';
 import 'package:provider/provider.dart';
 import 'package:geotrack_frontend/services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,24 +56,41 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _saveSettings() async {
     if (_settingsFormKey.currentState!.validate()) {
-      final prefs = await SharedPreferences.getInstance();
       final collectInterval = int.parse(_collectIntervalController.text);
       final syncInterval = int.parse(_syncIntervalController.text);
 
-      await prefs.setInt('collect_interval', collectInterval);
-      await prefs.setInt('sync_interval', syncInterval);
+      try {
+        final apiService = ApiService();
 
-      if (!mounted) return;
+        // Utiliser PUT au lieu de PATCH
+        final updatedConfig = await apiService.updateConfig({
+          'x_parameter': collectInterval,
+          'y_parameter': syncInterval,
+          // Ajouter device_id si requis par l'API
+          'device_id': 'mobile-device', // ou récupérer la valeur actuelle
+        });
 
-      // Retourner true pour indiquer que les paramètres ont été modifiés
-      Navigator.pop(context, true);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('collect_interval', updatedConfig.xParameter);
+        await prefs.setInt('sync_interval', updatedConfig.yParameter);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Paramètres sauvegardés avec succès'),
-          backgroundColor: Colors.green,
-        ),
-      );
+        if (!mounted) return;
+        Navigator.pop(context, true);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Paramètres sauvegardés avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de la sauvegarde: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -46,8 +46,7 @@ class ApiService {
       final headers = await _getHeaders();
 
       final body = {
-        "device_id":
-            data.deviceId, // Assure-toi que ce champ existe et est renseigné
+        "device_id": data.deviceId,
         "lat": data.lat,
         "lon": data.lon,
         "timestamp": data.timestamp.toIso8601String(),
@@ -92,6 +91,70 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Failed to load GPS data: $e');
+    }
+  }
+
+  Future<Config> updateConfig(Map<String, dynamic> updates) async {
+    try {
+      final apiUrl = await _getApiUrl();
+      final headers = await _getHeaders();
+
+      print('🔄 PUT Request to: $apiUrl/config/');
+      print('📦 Payload: $updates');
+
+      final response = await http.put(
+        Uri.parse('$apiUrl/config/'),
+        headers: headers,
+        body: json.encode(updates),
+      );
+
+      print('📤 Response Status: ${response.statusCode}');
+      print('📤 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Config.fromJson(data);
+      } else {
+        throw Exception(
+          'Failed to update config: ${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error in updateConfig: $e');
+      rethrow;
+    }
+  }
+
+  // Méthode pour mettre à jour partiellement
+  Future<Config> partialUpdateConfig(Map<String, dynamic> updates) async {
+    try {
+      final apiUrl = await _getApiUrl();
+      final headers = await _getHeaders();
+
+      print('🔄 PATCH Request to: $apiUrl/config/');
+      print('📦 Payload: $updates');
+      print('🔑 Headers: $headers');
+
+      final response = await http.patch(
+        Uri.parse('$apiUrl/config/'),
+        headers: headers,
+        body: json.encode(updates),
+      );
+
+      print('📤 Response Status: ${response.statusCode}');
+      print('📤 Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Config.fromJson(data);
+      } else {
+        throw Exception(
+          'Failed to update config: ${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (e) {
+      print('❌ Error in partialUpdateConfig: $e');
+      rethrow;
     }
   }
 }

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geotrack_frontend/models/config_model.dart';
 import 'package:geotrack_frontend/models/gps_data_model.dart';
+import 'package:geotrack_frontend/services/api_service.dart';
 import 'package:provider/provider.dart';
 import 'package:geotrack_frontend/services/auth_service.dart';
 import 'package:geotrack_frontend/services/gps_service.dart';
@@ -10,6 +12,7 @@ import 'package:geotrack_frontend/widgets/connection_status.dart';
 import 'package:geotrack_frontend/pages/settings_page.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geotrack_frontend/services/auto_collect_service.dart'; // IMPORT AJOUTÉ
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -23,6 +26,8 @@ class _DashboardPageState extends State<DashboardPage>
   final GpsService _gpsService = GpsService();
   final SyncService _syncService = SyncService();
   final StorageService _storageService = StorageService();
+  Config? _currentConfig;
+  bool _configLoading = false;
 
   Map<String, dynamic> _stats = {};
   Timer? _collectTimer;
@@ -50,16 +55,35 @@ class _DashboardPageState extends State<DashboardPage>
     _tabController = TabController(length: 2, vsync: this);
     _initIntervalsAndTimers();
     _loadStats();
+    _loadConfig();
     _loadPendingData();
     _loadHistoryData();
     _startPreferencesChecker();
   }
 
   Future<void> _initIntervalsAndTimers() async {
-    await _loadIntervals();
+    // Attendre que la configuration soit chargée
+    while (_currentConfig == null && _configLoading) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    // Utiliser les valeurs de configuration ou les valeurs par défaut
+    final collectInterval = _currentConfig?.xParameter ?? 5;
+    final syncInterval = _currentConfig?.yParameter ?? 10;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('collect_interval', collectInterval);
+    await prefs.setInt('sync_interval', syncInterval);
+
+    setState(() {
+      _collectInterval = collectInterval;
+      _syncInterval = syncInterval;
+      _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
+      _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
+    });
+
     // Première collecte dès l'ouverture
     await _autoCollect();
-    _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
     await _loadPendingData();
     await _loadHistoryData();
     _startAutoCollect();
@@ -67,13 +91,40 @@ class _DashboardPageState extends State<DashboardPage>
     _startStatsTimer();
   }
 
+  Future<void> _loadConfig() async {
+    setState(() => _configLoading = true);
+    try {
+      final apiService = ApiService();
+      final config = await apiService.getConfig();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('collect_interval', config.xParameter);
+      await prefs.setInt('sync_interval', config.yParameter);
+
+      setState(() {
+        _currentConfig = config;
+        _collectInterval = config.xParameter;
+        _syncInterval = config.yParameter;
+        _nextCollection = DateTime.now().add(
+          Duration(minutes: _collectInterval),
+        );
+        _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
+      });
+
+      // Redémarrer les timers avec les nouveaux intervalles
+      _restartTimersWithNewIntervals();
+    } catch (e) {
+      print('❌ Error loading config: $e');
+    } finally {
+      setState(() => _configLoading = false);
+    }
+  }
+
   Future<void> _loadIntervals() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _collectInterval = prefs.getInt('collect_interval') ?? 5;
       _syncInterval = prefs.getInt('sync_interval') ?? 10;
-      _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
-      _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
     });
   }
 
@@ -169,33 +220,34 @@ class _DashboardPageState extends State<DashboardPage>
     _prefsCheckTimer = Timer.periodic(const Duration(seconds: 2), (
       timer,
     ) async {
+      if (!mounted) return;
+
       final prefs = await SharedPreferences.getInstance();
       final newCollectInterval = prefs.getInt('collect_interval') ?? 5;
       final newSyncInterval = prefs.getInt('sync_interval') ?? 10;
 
       if (newCollectInterval != _collectInterval ||
           newSyncInterval != _syncInterval) {
-        if (mounted) {
-          await _restartTimersWithNewIntervals();
-        }
+        print(
+          '🔄 Intervalles modifiés: $newCollectInterval min, $newSyncInterval min',
+        );
+        await _restartTimersWithNewIntervals();
       }
     });
   }
 
-  // Nouvelle méthode pour redémarrer les timers avec les nouveaux intervalles
   Future<void> _restartTimersWithNewIntervals() async {
-    // Annuler les timers existants
+    // D'abord charger les nouveaux intervalles depuis SharedPreferences
+    await _loadIntervals();
+
     _collectTimer?.cancel();
     _syncTimer?.cancel();
-
-    // Recharger les intervalles depuis SharedPreferences
-    await _loadIntervals();
 
     // Redémarrer les timers avec les nouveaux intervalles
     _startAutoCollect();
     _startAutoSync();
 
-    // Mettre à jour les compteurs
+    // Mettre à jour l'interface
     setState(() {
       _nextCollection = DateTime.now().add(Duration(minutes: _collectInterval));
       _nextSync = DateTime.now().add(Duration(minutes: _syncInterval));
@@ -204,8 +256,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _autoCollect() async {
     try {
-      final location = await _gpsService.getCurrentLocation();
-      await _storageService.savePendingGpsData(location);
+      // Utilisation de la nouvelle méthode
+      await AutoCollectService.collectGpsDataBackground();
       await _loadStats();
       await _loadPendingData(); // Recharger les données en attente
       await _loadHistoryData(); // Recharger l'historique
@@ -214,7 +266,8 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _autoSync() async {
     try {
-      await _syncService.syncPendingData();
+      // Utilisation de la nouvelle méthode
+      await AutoCollectService.syncGpsDataBackground();
       // Recharger toutes les données après synchronisation
       await Future.wait([_loadStats(), _loadPendingData(), _loadHistoryData()]);
     } catch (e) {

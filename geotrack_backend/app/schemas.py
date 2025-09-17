@@ -63,3 +63,8 @@ class SyncLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+        
+class ConfigUpdateRequest(BaseModel):
+    x_parameter: Optional[int] = None
+    y_parameter: Optional[int] = None
+    device_id: Optional[str] = None
